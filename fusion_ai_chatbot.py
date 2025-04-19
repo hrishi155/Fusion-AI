@@ -1,38 +1,38 @@
+# fusion_ai_app.py
+
 import streamlit as st
-import wikipedia
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
 
-st.set_page_config(page_title="Fusion AI", page_icon="🤖")
+st.set_page_config(page_title="Fusion AI", page_icon="🤖", layout="centered")
 
-st.title("🤖 Fusion AI")
-st.markdown("A personal chatbot that helps you chat, feel, and code!")
+st.title("🤖 Fusion AI - Your LLM Assistant")
+st.markdown("Ask anything — from coding help to current affairs, general queries, or emotional support.")
 
-# Load model
-model_name = "microsoft/DialoGPT-medium"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(model_name)
+@st.cache_resource
+def load_model():
+    model_name = "EleutherAI/gpt-neo-2.7B"  # ✅ Open-access model without the need for login
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16,
+        device_map="auto",
+        trust_remote_code=True
+    )
+    return pipeline("text-generation", model=model, tokenizer=tokenizer, max_new_tokens=512)
 
-if "chat_history_ids" not in st.session_state:
-    st.session_state.chat_history_ids = None
-if "past_inputs" not in st.session_state:
-    st.session_state.past_inputs = []
+llm = load_model()
 
-# User input
-user_input = st.text_input("You:", key="input")
+# Chat interface
+user_prompt = st.text_area("💬 You:", height=100, placeholder="Ask Fusion AI anything...")
 
-if user_input:
-    st.session_state.past_inputs.append(user_input)
-
-    # Tokenize input
-    new_input_ids = tokenizer.encode(user_input + tokenizer.eos_token, return_tensors='pt')
-
-    # Append to history
-    bot_input_ids = torch.cat([st.session_state.chat_history_ids, new_input_ids], dim=-1) if st.session_state.chat_history_ids is not None else new_input_ids
-
-    # Generate response
-    st.session_state.chat_history_ids = model.generate(bot_input_ids, max_length=1000, pad_token_id=tokenizer.eos_token_id)
-
-    response = tokenizer.decode(st.session_state.chat_history_ids[:, bot_input_ids.shape[-1]:][0], skip_special_tokens=True)
-
-    st.markdown(f"**Fusion AI:** {response}")
+if st.button("Generate Response"):
+    if user_prompt.strip() != "":
+        with st.spinner("Fusion AI is thinking..."):
+            response = llm(user_prompt)[0]["generated_text"]
+            # Remove prompt from start of generated text if it repeats
+            if response.startswith(user_prompt):
+                response = response[len(user_prompt):]
+            st.markdown(f"**🧠 Fusion AI:** {response.strip()}")
+    else:
+        st.warning("Please enter a question.")
